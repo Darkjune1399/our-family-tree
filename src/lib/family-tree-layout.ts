@@ -20,59 +20,124 @@ const V_GAP = 100;
 const SPOUSE_GAP = 20;
 
 export function buildFamilyTree(members: FamilyMember[], marriages: Marriage[]): TreeNode[] {
-  // Find root members (no father_id and no mother_id)
-  const roots = members.filter(m => !m.father_id && !m.mother_id);
-  
-  // Remove roots who are only spouses of another root (avoid duplicates)
-  const rootIds = new Set(roots.map(r => r.id));
+  const memberMap = new Map<string, FamilyMember>();
+  members.forEach(m => memberMap.set(m.id, m));
+
+  // Build parent→children index
+  const childrenOf = new Map<string, Set<string>>();
+  members.forEach(m => {
+    if (m.father_id) {
+      if (!childrenOf.has(m.father_id)) childrenOf.set(m.father_id, new Set());
+      childrenOf.get(m.father_id)!.add(m.id);
+    }
+    if (m.mother_id) {
+      if (!childrenOf.has(m.mother_id)) childrenOf.set(m.mother_id, new Set());
+      childrenOf.get(m.mother_id)!.add(m.id);
+    }
+  });
+
+  // Find true ancestors: walk up parent chain to find topmost ancestors
+  function getAncestors(id: string, seen: Set<string> = new Set()): string[] {
+    if (seen.has(id)) return [id];
+    seen.add(id);
+    const m = memberMap.get(id);
+    if (!m) return [id];
+
+    const parents: string[] = [];
+    if (m.father_id && memberMap.has(m.father_id)) parents.push(...getAncestors(m.father_id, seen));
+    if (m.mother_id && memberMap.has(m.mother_id)) parents.push(...getAncestors(m.mother_id, seen));
+
+    // If no parents found in our data, this person is a root
+    if (parents.length === 0) return [id];
+    return parents;
+  }
+
+  // Find all root ancestors
+  const rootSet = new Set<string>();
+  members.forEach(m => {
+    const ancestors = getAncestors(m.id);
+    ancestors.forEach(a => rootSet.add(a));
+  });
+
+  // Deduplicate: if two roots are married, keep one as primary
   const spouseOfRoot = new Set<string>();
   marriages.forEach(mar => {
-    if (rootIds.has(mar.spouse1_id) && rootIds.has(mar.spouse2_id)) {
-      // Keep the male or first one as primary
-      const m1 = members.find(m => m.id === mar.spouse1_id);
-      const m2 = members.find(m => m.id === mar.spouse2_id);
+    if (rootSet.has(mar.spouse1_id) && rootSet.has(mar.spouse2_id)) {
+      const m1 = memberMap.get(mar.spouse1_id);
+      const m2 = memberMap.get(mar.spouse2_id);
       if (m1 && m2) {
-        // Keep male as root, mark female as spouse
         if (m1.gender === 'male') spouseOfRoot.add(m2.id);
         else spouseOfRoot.add(m1.id);
       }
     }
   });
 
-  const primaryRoots = roots.filter(r => !spouseOfRoot.has(r.id));
-  
-  // If no roots found, use all members without parents
-  const finalRoots = primaryRoots.length > 0 ? primaryRoots : (roots.length > 0 ? roots : members.slice(0, 1));
+  // Also deduplicate roots that are parents: if root A has father_id/mother_id pointing to root B, 
+  // B is the true root, not A. But we already handled this via getAncestors.
+  // Additional: if a root is listed as someone's mother/father but that someone's other parent is also a root,
+  // mark the mother as spouse if they share children
+  const rootArray = [...rootSet].filter(id => !spouseOfRoot.has(id));
 
   const visited = new Set<string>();
 
   function buildNode(member: FamilyMember): TreeNode {
     visited.add(member.id);
 
-    // Find spouses via marriages
+    // Find spouses via marriages table
     const memberMarriages = marriages.filter(
       m => m.spouse1_id === member.id || m.spouse2_id === member.id
     );
-    const spouses = memberMarriages
-      .map(m => {
-        const spouseId = m.spouse1_id === member.id ? m.spouse2_id : m.spouse1_id;
-        const spouse = members.find(x => x.id === spouseId);
-        return spouse ? { member: spouse, marriageId: m.id } : null;
-      })
-      .filter(Boolean) as { member: FamilyMember; marriageId: string }[];
+    const spouses: { member: FamilyMember; marriageId: string }[] = [];
+    memberMarriages.forEach(m => {
+      const spouseId = m.spouse1_id === member.id ? m.spouse2_id : m.spouse1_id;
+      const spouse = memberMap.get(spouseId);
+      if (spouse && !visited.has(spouse.id)) {
+        spouses.push({ member: spouse, marriageId: m.id });
+        visited.add(spouse.id);
+      }
+    });
 
-    // Mark spouses as visited
-    spouses.forEach(s => visited.add(s.member.id));
+    // Also find implicit spouses: people who share children with this member but have no marriage record
+    const myChildIds = childrenOf.get(member.id) || new Set();
+    myChildIds.forEach(childId => {
+      const child = memberMap.get(childId);
+      if (!child) return;
+      // The other parent
+      const otherParentId = child.father_id === member.id ? child.mother_id : child.father_id;
+      if (otherParentId && !visited.has(otherParentId)) {
+        const otherParent = memberMap.get(otherParentId);
+        if (otherParent) {
+          // Check not already in spouses
+          if (!spouses.find(s => s.member.id === otherParentId)) {
+            spouses.push({ member: otherParent, marriageId: `implicit-${member.id}-${otherParentId}` });
+            visited.add(otherParentId);
+          }
+        }
+      }
+    });
 
-    // Find children (where this member or any spouse is father/mother)
-    const parentIds = [member.id, ...spouses.map(s => s.member.id)];
-    const children = members
-      .filter(m => 
-        !visited.has(m.id) &&
-        ((m.father_id && parentIds.includes(m.father_id)) || 
-         (m.mother_id && parentIds.includes(m.mother_id)))
-      )
-      .map(child => buildNode(child));
+    // Collect all children of this member + all spouses
+    const allParentIds = new Set([member.id, ...spouses.map(s => s.member.id)]);
+    const childIdSet = new Set<string>();
+    allParentIds.forEach(pid => {
+      const kids = childrenOf.get(pid);
+      if (kids) kids.forEach(k => childIdSet.add(k));
+    });
+
+    const children: TreeNode[] = [];
+    childIdSet.forEach(childId => {
+      if (!visited.has(childId)) {
+        const child = memberMap.get(childId);
+        if (child) children.push(buildNode(child));
+      }
+    });
+
+    // Sort children by birth_date
+    children.sort((a, b) => {
+      const da = a.member.birth_date || '';
+      const db = b.member.birth_date || '';
+      return da.localeCompare(db);
+    });
 
     return {
       id: member.id,
@@ -85,12 +150,16 @@ export function buildFamilyTree(members: FamilyMember[], marriages: Marriage[]):
     };
   }
 
-  const trees = finalRoots.map(r => {
-    if (!visited.has(r.id)) return buildNode(r);
-    return null;
-  }).filter(Boolean) as TreeNode[];
+  // Build trees from roots
+  const trees: TreeNode[] = [];
+  rootArray.forEach(rootId => {
+    if (!visited.has(rootId)) {
+      const m = memberMap.get(rootId);
+      if (m) trees.push(buildNode(m));
+    }
+  });
 
-  // Also add orphan members not in any tree
+  // Add any orphan members not yet visited
   members.forEach(m => {
     if (!visited.has(m.id)) {
       trees.push(buildNode(m));
@@ -115,20 +184,17 @@ function layoutTree(node: TreeNode, depth: number, startX: number): void {
     return;
   }
 
-  // Layout children first
   let childX = startX;
-  node.children.forEach((child, i) => {
+  node.children.forEach(child => {
     layoutTree(child, depth + 1, childX);
     childX = getTreeRight(child) + H_GAP;
   });
 
-  // Center parent over children
   const firstChild = node.children[0];
   const lastChild = node.children[node.children.length - 1];
   const childrenCenter = (firstChild.x + lastChild.x + lastChild.width) / 2;
   node.x = childrenCenter - node.width / 2;
 
-  // If node is pushed left of startX, shift children right
   if (node.x < startX) {
     const shift = startX - node.x;
     node.x = startX;
