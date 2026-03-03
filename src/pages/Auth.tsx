@@ -37,7 +37,7 @@ const Auth = () => {
     if (error) {
       toast({ title: 'Login gagal', description: error.message, variant: 'destructive' });
     } else {
-      navigate('/');
+      navigate('/tree');
     }
     setLoading(false);
   };
