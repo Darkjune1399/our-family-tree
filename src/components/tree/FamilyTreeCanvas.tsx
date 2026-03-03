@@ -69,30 +69,79 @@ export function FamilyTreeCanvas({ trees }: Props) {
   }, []);
 
   // Touch support
-  const touchRef = useRef<{ x: number; y: number; dist: number } | null>(null);
+  type TouchState =
+    | { mode: 'pan'; offsetX: number; offsetY: number }
+    | { mode: 'pinch'; lastDist: number };
+
+  const touchRef = useRef<TouchState | null>(null);
+
+  const getTouchDistance = (touches: React.TouchList) => {
+    if (touches.length < 2) return 0;
+    return Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+  };
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 1) {
-      touchRef.current = { x: e.touches[0].clientX - transform.x, y: e.touches[0].clientY - transform.y, dist: 0 };
+      touchRef.current = {
+        mode: 'pan',
+        offsetX: e.touches[0].clientX - transform.x,
+        offsetY: e.touches[0].clientY - transform.y,
+      };
     } else if (e.touches.length === 2) {
-      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-      touchRef.current = { x: transform.x, y: transform.y, dist };
+      const dist = getTouchDistance(e.touches);
+      touchRef.current = { mode: 'pinch', lastDist: dist || 1 };
     }
   }, [transform]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!touchRef.current) return;
-    if (e.touches.length === 1) {
-      setTransform(prev => ({
-        ...prev,
-        x: e.touches[0].clientX - touchRef.current!.x,
-        y: e.touches[0].clientY - touchRef.current!.y,
-      }));
-    } else if (e.touches.length === 2) {
-      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-      const scale = dist / touchRef.current.dist;
-      setTransform(prev => ({ ...prev, scale: Math.max(0.1, Math.min(3, prev.scale * scale)) }));
-      touchRef.current.dist = dist;
+    const touchState = touchRef.current;
+    if (!touchState) return;
+
+    if (e.touches.length === 1 && touchState.mode === 'pan') {
+      const touch = e.touches[0];
+      const nextX = touch.clientX - touchState.offsetX;
+      const nextY = touch.clientY - touchState.offsetY;
+      setTransform(prev => ({ ...prev, x: nextX, y: nextY }));
+      return;
+    }
+
+    if (e.touches.length === 2) {
+      const dist = getTouchDistance(e.touches);
+      const prevDist = touchState.mode === 'pinch' ? touchState.lastDist : 0;
+
+      if (!Number.isFinite(dist) || dist <= 0 || prevDist <= 0) {
+        touchRef.current = { mode: 'pinch', lastDist: dist || 1 };
+        return;
+      }
+
+      const scaleFactor = dist / prevDist;
+      if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
+        touchRef.current = { mode: 'pinch', lastDist: dist };
+        return;
+      }
+
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) {
+        touchRef.current = { mode: 'pinch', lastDist: dist };
+        return;
+      }
+
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+      setTransform(prev => {
+        const newScale = Math.max(0.1, Math.min(3, prev.scale * scaleFactor));
+        return {
+          scale: newScale,
+          x: centerX - (centerX - prev.x) * (newScale / prev.scale),
+          y: centerY - (centerY - prev.y) * (newScale / prev.scale),
+        };
+      });
+
+      touchRef.current = { mode: 'pinch', lastDist: dist };
     }
   }, []);
 
@@ -255,7 +304,7 @@ export function FamilyTreeCanvas({ trees }: Props) {
       <svg
         ref={svgRef}
         className="w-full h-full select-none"
-        style={{ cursor: dragging ? 'grabbing' : 'grab' }}
+        style={{ cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -263,7 +312,17 @@ export function FamilyTreeCanvas({ trees }: Props) {
         onMouseLeave={handleMouseUp}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onTouchEnd={() => { touchRef.current = null; }}
+        onTouchEnd={(e) => {
+          if (e.touches.length === 1) {
+            touchRef.current = {
+              mode: 'pan',
+              offsetX: e.touches[0].clientX - transform.x,
+              offsetY: e.touches[0].clientY - transform.y,
+            };
+            return;
+          }
+          touchRef.current = null;
+        }}
       >
         <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
           {/* Connections first (behind nodes) */}
