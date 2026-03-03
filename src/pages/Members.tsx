@@ -71,7 +71,7 @@ const Members = () => {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((member) => (
-              <MemberCard key={member.id} member={member} />
+              <MemberCard key={member.id} member={member} members={members} canEdit={!!user} onRefresh={fetchMembers} />
             ))}
           </div>
           {visibleCount < filtered.length && (
