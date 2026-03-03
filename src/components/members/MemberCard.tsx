@@ -2,22 +2,34 @@ import { useState } from 'react';
 import { Tables } from '@/integrations/supabase/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { User, MapPin, Phone, Calendar, Pencil, Trash2 } from 'lucide-react';
+import { User, MapPin, Phone, Calendar, Pencil, Trash2, Heart } from 'lucide-react';
 import { EditMemberDialog } from './EditMemberDialog';
 import { DeleteMemberDialog } from './DeleteMemberDialog';
+import { ManageSpousesDialog } from './ManageSpousesDialog';
 
 type FamilyMember = Tables<'family_members'>;
+type Marriage = Tables<'marriages'>;
 
 type Props = {
   member: FamilyMember;
   members: FamilyMember[];
+  marriages: Marriage[];
   canEdit?: boolean;
   onRefresh: () => void;
 };
 
-export function MemberCard({ member, members, canEdit, onRefresh }: Props) {
+export function MemberCard({ member, members, marriages, canEdit, onRefresh }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [spouseOpen, setSpouseOpen] = useState(false);
+
+  const memberMarriages = marriages.filter(
+    m => m.spouse1_id === member.id || m.spouse2_id === member.id
+  );
+  const spouseNames = memberMarriages.map(m => {
+    const spouseId = m.spouse1_id === member.id ? m.spouse2_id : m.spouse1_id;
+    return members.find(x => x.id === spouseId)?.full_name || '?';
+  });
 
   return (
     <>
@@ -37,6 +49,9 @@ export function MemberCard({ member, members, canEdit, onRefresh }: Props) {
             </div>
             {canEdit && (
               <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSpouseOpen(true)} title="Kelola pasangan">
+                  <Heart className="h-3.5 w-3.5" />
+                </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditOpen(true)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
@@ -48,6 +63,12 @@ export function MemberCard({ member, members, canEdit, onRefresh }: Props) {
           </div>
         </CardHeader>
         <CardContent className="text-sm space-y-1">
+          {spouseNames.length > 0 && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Heart className="h-3 w-3 text-primary" />
+              <span className="truncate">{spouseNames.join(', ')}</span>
+            </div>
+          )}
           {member.birth_place && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <MapPin className="h-3 w-3" />
@@ -72,6 +93,14 @@ export function MemberCard({ member, members, canEdit, onRefresh }: Props) {
         </CardContent>
       </Card>
 
+      <ManageSpousesDialog
+        member={member}
+        members={members}
+        marriages={marriages}
+        open={spouseOpen}
+        onOpenChange={setSpouseOpen}
+        onUpdated={onRefresh}
+      />
       <EditMemberDialog
         member={member}
         members={members}

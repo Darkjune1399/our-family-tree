@@ -9,11 +9,13 @@ import { MemberCard } from '@/components/members/MemberCard';
 import { AddMemberDialog } from '@/components/members/AddMemberDialog';
 
 type FamilyMember = Tables<'family_members'>;
+type Marriage = Tables<'marriages'>;
 
 const PAGE_SIZE = 24;
 
 const Members = () => {
   const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [marriages, setMarriages] = useState<Marriage[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
@@ -22,13 +24,17 @@ const Members = () => {
   const [genderFilter, setGenderFilter] = useState('all');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const fetchMembers = async () => {
-    const { data } = await supabase.from('family_members').select('*').order('full_name');
-    setMembers(data || []);
+  const fetchData = async () => {
+    const [membersRes, marriagesRes] = await Promise.all([
+      supabase.from('family_members').select('*').order('full_name'),
+      supabase.from('marriages').select('*'),
+    ]);
+    setMembers(membersRes.data || []);
+    setMarriages(marriagesRes.data || []);
     setLoading(false);
   };
 
-  useEffect(() => { fetchMembers(); }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const filtered = useMemo(() => {
     let result = members;
@@ -52,7 +58,7 @@ const Members = () => {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-bold text-foreground">Anggota Keluarga</h1>
-        {user && <AddMemberDialog members={members} userId={user.id} onAdded={fetchMembers} />}
+        {user && <AddMemberDialog members={members} userId={user.id} onAdded={fetchData} />}
       </div>
 
       <MemberFilters
@@ -71,7 +77,7 @@ const Members = () => {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((member) => (
-              <MemberCard key={member.id} member={member} members={members} canEdit={!!user} onRefresh={fetchMembers} />
+              <MemberCard key={member.id} member={member} members={members} marriages={marriages} canEdit={!!user} onRefresh={fetchData} />
             ))}
           </div>
           {visibleCount < filtered.length && (
