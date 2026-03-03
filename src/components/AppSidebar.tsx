@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/sidebar';
 
 const mainItems = [
-  { title: 'Pohon Silsilah', url: '/', icon: TreePine },
+  { title: 'Pohon Silsilah', url: '/tree', icon: TreePine },
   { title: 'Anggota Keluarga', url: '/members', icon: Users },
   { title: 'Pencarian', url: '/search', icon: Search },
 ];
