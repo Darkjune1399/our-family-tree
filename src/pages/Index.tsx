@@ -2,20 +2,34 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { TreePine, Leaf } from 'lucide-react';
+import { buildFamilyTree, TreeNode } from '@/lib/family-tree-layout';
+import { FamilyTreeCanvas } from '@/components/tree/FamilyTreeCanvas';
 
 type FamilyMember = Tables<'family_members'>;
+type Marriage = Tables<'marriages'>;
 
 const Index = () => {
   const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [marriages, setMarriages] = useState<Marriage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [trees, setTrees] = useState<TreeNode[]>([]);
 
   useEffect(() => {
-    const fetchMembers = async () => {
-      const { data } = await supabase.from('family_members').select('*');
-      setMembers(data || []);
+    const fetchData = async () => {
+      const [membersRes, marriagesRes] = await Promise.all([
+        supabase.from('family_members').select('*'),
+        supabase.from('marriages').select('*'),
+      ]);
+      const m = membersRes.data || [];
+      const mar = marriagesRes.data || [];
+      setMembers(m);
+      setMarriages(mar);
+      if (m.length > 0) {
+        setTrees(buildFamilyTree(m, mar));
+      }
       setLoading(false);
     };
-    fetchMembers();
+    fetchData();
   }, []);
 
   if (loading) {
@@ -43,11 +57,16 @@ const Index = () => {
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-display font-bold text-foreground mb-6">Pohon Silsilah</h1>
-      <p className="text-muted-foreground">
-        Visualisasi pohon keluarga akan ditampilkan di sini. ({members.length} anggota terdaftar)
-      </p>
+    <div className="flex flex-col h-full">
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-display font-bold text-foreground">Pohon Silsilah</h1>
+          <p className="text-xs text-muted-foreground">{members.length} anggota • Scroll untuk zoom, drag untuk geser</p>
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <FamilyTreeCanvas trees={trees} />
+      </div>
     </div>
   );
 };
