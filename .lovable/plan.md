@@ -1,59 +1,49 @@
-## Silsilah Keluarga - Platform Pohon Keluarga 🌿
 
-### Tema & Desain
 
-- **Palet warna hijau lembut & natural** — nuansa hijau sage, krem, cokelat muda yang hangat dan berkesan keluarga
-- Layout dengan **sidebar navigasi**, **main canvas** untuk tree, dan **modal/panel** untuk detail anggota
-- Desain clean, modern, mobile-friendly
+## Plan: 4 Fitur Baru untuk Pohon Silsilah
 
----
+### 1. Klik Node untuk Re-center (Fokus pada Anggota)
+**File:** `src/components/tree/FamilyTreeCanvas.tsx`
 
-### Tahap 1: Fondasi (yang akan dibangun sekarang)
+- Saat klik node anggota, selain menampilkan popup detail, animasikan transform agar node tersebut berada di tengah viewport
+- Tambahkan fungsi `focusOnMember(x, y, width)` yang menghitung transform baru sehingga node terpusat
+- Gunakan smooth transition via CSS `transition` pada group transform atau state update bertahap
 
-#### 1. Autentikasi & Peran User
+### 2. Halaman Profil Detail Anggota
+**File baru:** `src/pages/MemberProfile.tsx`
+**Route baru di:** `src/App.tsx` → `/member/:id`
 
-- Halaman **Login & Sign Up** dengan email atau akun google 
-- Sistem **superadmin** yang bisa mengelola semua data
-- User biasa hanya bisa mengedit data diri dan keluarga di bawah silsilahnya
-- Profil user terhubung ke data anggota keluarga
+- Halaman full-page yang menampilkan semua info anggota: foto, nama, gender, tanggal/tempat lahir & wafat, alamat, HP, bio
+- Tampilkan daftar pasangan (dari tabel marriages) dan anak-anak (dari father_id/mother_id)
+- Tampilkan orang tua (father_id, mother_id) dengan link ke profil mereka
+- Tombol "Lihat di Pohon" yang navigasi ke `/tree?focus=<member_id>`
+- Update popup detail di FamilyTreeCanvas untuk menambahkan link "Lihat Profil Lengkap" ke halaman ini
 
-#### 2. CRUD Anggota Keluarga
+### 3. Export Data Keluarga ke PDF
+**File baru:** `src/components/tree/ExportPdfButton.tsx`
+**Dependency:** Tidak perlu library tambahan — gunakan browser `window.print()` dengan print-friendly layout, atau generate PDF via canvas/SVG serialization
 
-- **Tambah anggota**: nama lengkap, jenis kelamin, tempat/tanggal lahir, tanggal wafat (opsional), foto profil, alamat, no HP dan bio
-- **Edit & Hapus** anggota dengan validasi hak akses
-- **Halaman profil detail** setiap anggota menampilkan info lengkap
+- Tambahkan tombol "Export PDF" di header halaman `/tree`
+- Pendekatan: serialize SVG pohon ke canvas via `foreignObject` atau `html2canvas`, lalu convert ke PDF blob menggunakan built-in atau lightweight approach
+- Alternatif lebih sederhana: buat halaman print-friendly `/tree/print` yang me-render pohon secara statis, lalu trigger `window.print()`
+- Juga export daftar anggota sebagai tabel dalam PDF
 
-#### 3. Hubungan Keluarga (Relationship Logic)
+### 4. Filter Tree Berdasarkan Cabang Keluarga
+**File:** `src/pages/Index.tsx` dan `src/components/tree/FamilyTreeCanvas.tsx`
 
-- Hubungkan anak ke **ayah & ibu** (father_id, mother_id)
-- Hubungkan **pasangan** — mendukung **multi-pasangan** (tabel relasi terpisah untuk spouse)
-- **Deteksi saudara kandung** otomatis berdasarkan orang tua yang sama
-
-#### 4. Visualisasi Pohon Silsilah
-
-- **Tree chart vertikal** (top-down) yang interaktif — bisa di-zoom dan di-drag
-- **Garis penghubung** otomatis untuk relasi orang tua-anak dan pasangan
-- **Klik anggota** untuk fokus/re-center pohon ke orang tersebut
-- **Tampilan publik** — tree bisa diakses tanpa login
-
-#### 5. Pencarian
-
-- **Search bar** untuk mencari anggota berdasarkan nama atau alamat
+- Tambahkan dropdown filter di header halaman `/tree` yang menampilkan daftar root ancestors
+- Saat dipilih, hanya tampilkan subtree dari root ancestor tersebut
+- Filter bekerja di level `trees` array — cukup filter array sebelum passing ke `FamilyTreeCanvas`
 
 ---
 
-### Tahap 2: Fitur Lanjutan (setelah inti selesai)
+### Urutan Implementasi
+1. Re-center on click (perubahan kecil di FamilyTreeCanvas)
+2. Filter cabang keluarga (perubahan di Index.tsx + small dropdown)
+3. Halaman profil detail (halaman baru + route)
+4. Export PDF (komponen baru + integrasi)
 
-- Filter berdasarkan cabang keluarga atau status hidup/meninggal
-- Ekspor bagan silsilah ke PNG/JPG/PDF
-- Upload & galeri foto per anggota
-- Optimasi performa untuk ratusan anggota
+### Catatan Teknis
+- Untuk PDF export, akan menggunakan pendekatan `window.print()` dengan CSS `@media print` sebagai solusi tanpa dependency tambahan
+- Semua fitur ini tidak memerlukan perubahan database
 
----
-
-### Backend (Lovable Cloud + Supabase)
-
-- Database relasional untuk menyimpan data anggota & relasi
-- Storage untuk foto profil
-- Row-Level Security untuk kontrol akses per user
-- Tabel peran user terpisah untuk superadmin
