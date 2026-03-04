@@ -74,7 +74,7 @@ const Dashboard = () => {
   ];
 
   const quickActions = [
-    { label: 'Tambah Anggota Baru', icon: UserPlus, to: '/members', bgClass: 'bg-primary hover:bg-primary/90' },
+    { label: 'Tambah Anggota', icon: UserPlus, to: '/members', bgClass: 'bg-primary hover:bg-primary/90' },
     { label: 'Lihat Silsilah', icon: TreePine, to: '/tree', bgClass: 'bg-[hsl(var(--stat-green))] hover:opacity-90' },
     { label: 'Cari Anggota', icon: Search, to: '/search', bgClass: 'bg-[hsl(var(--stat-cyan))] hover:opacity-90' },
   ];
