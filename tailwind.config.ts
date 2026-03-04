@@ -108,11 +108,14 @@ export default {
   				DEFAULT: 'hsl(var(--leaf))',
   				foreground: 'hsl(var(--leaf-foreground))'
   			},
-  			warm: {
-  				DEFAULT: 'hsl(var(--warm))',
-  				foreground: 'hsl(var(--warm-foreground))'
-  			}
-  		},
+			warm: {
+				DEFAULT: 'hsl(var(--warm))',
+				foreground: 'hsl(var(--warm-foreground))'
+			},
+			'stat-green': 'hsl(var(--stat-green))',
+			'stat-cyan': 'hsl(var(--stat-cyan))',
+			'stat-gray': 'hsl(var(--stat-gray))',
+		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
