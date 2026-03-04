@@ -1,21 +1,39 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Tables } from '@/integrations/supabase/types';
 import { TreeNode, NODE_WIDTH, NODE_HEIGHT, SPOUSE_GAP, V_GAP, getTreeBounds } from '@/lib/family-tree-layout';
-import { User, Heart } from 'lucide-react';
+import { User } from 'lucide-react';
+import { TreeNodeCard } from './TreeNodeCard';
+import { TreeConnections } from './TreeConnections';
 
 type FamilyMember = Tables<'family_members'>;
 
 type Props = {
   trees: TreeNode[];
+  focusMemberId?: string | null;
 };
 
-export function FamilyTreeCanvas({ trees }: Props) {
+export function FamilyTreeCanvas({ trees, focusMemberId }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [animating, setAnimating] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
+  const navigate = useNavigate();
+
+  const focusOnNode = useCallback((nx: number, ny: number, nw: number) => {
+    if (!containerRef.current) return;
+    const cw = containerRef.current.clientWidth;
+    const ch = containerRef.current.clientHeight;
+    const scale = transform.scale;
+    const x = cw / 2 - (nx + nw / 2) * scale;
+    const y = ch / 2 - (ny + NODE_HEIGHT / 2) * scale;
+    setAnimating(true);
+    setTransform(prev => ({ ...prev, x, y }));
+    setTimeout(() => setAnimating(false), 400);
+  }, [transform.scale]);
 
   // Center tree on mount
   useEffect(() => {
@@ -31,6 +49,31 @@ export function FamilyTreeCanvas({ trees }: Props) {
     const y = 40;
     setTransform({ x, y, scale });
   }, [trees]);
+
+  // Focus on member if focusMemberId is set
+  useEffect(() => {
+    if (!focusMemberId || trees.length === 0) return;
+    const findNode = (nodes: TreeNode[]): TreeNode | null => {
+      for (const n of nodes) {
+        if (n.id === focusMemberId) return n;
+        for (const s of n.spouses) {
+          if (s.member.id === focusMemberId) return n; // focus on the node pair
+        }
+        const found = findNode(n.children);
+        if (found) return found;
+      }
+      return null;
+    };
+    const node = findNode(trees);
+    if (node) {
+      setTimeout(() => focusOnNode(node.x, node.y, node.width), 500);
+    }
+  }, [focusMemberId, trees, focusOnNode]);
+
+  const handleNodeClick = useCallback((member: FamilyMember, nx: number, ny: number, nw: number) => {
+    setSelectedMember(member);
+    focusOnNode(nx, ny, nw);
+  }, [focusOnNode]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -57,6 +100,7 @@ export function FamilyTreeCanvas({ trees }: Props) {
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragging) return;
+    setAnimating(false);
     setTransform(prev => ({
       ...prev,
       x: e.clientX - dragStart.x,
@@ -84,6 +128,7 @@ export function FamilyTreeCanvas({ trees }: Props) {
   };
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setAnimating(false);
     if (e.touches.length === 1) {
       touchRef.current = {
         mode: 'pan',
@@ -102,36 +147,26 @@ export function FamilyTreeCanvas({ trees }: Props) {
 
     if (e.touches.length === 1 && touchState.mode === 'pan') {
       const touch = e.touches[0];
-      const nextX = touch.clientX - touchState.offsetX;
-      const nextY = touch.clientY - touchState.offsetY;
-      setTransform(prev => ({ ...prev, x: nextX, y: nextY }));
+      setTransform(prev => ({ ...prev, x: touch.clientX - touchState.offsetX, y: touch.clientY - touchState.offsetY }));
       return;
     }
 
     if (e.touches.length === 2) {
       const dist = getTouchDistance(e.touches);
       const prevDist = touchState.mode === 'pinch' ? touchState.lastDist : 0;
-
       if (!Number.isFinite(dist) || dist <= 0 || prevDist <= 0) {
         touchRef.current = { mode: 'pinch', lastDist: dist || 1 };
         return;
       }
-
       const scaleFactor = dist / prevDist;
       if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) {
         touchRef.current = { mode: 'pinch', lastDist: dist };
         return;
       }
-
       const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) {
-        touchRef.current = { mode: 'pinch', lastDist: dist };
-        return;
-      }
-
+      if (!rect) { touchRef.current = { mode: 'pinch', lastDist: dist }; return; }
       const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
       const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-
       setTransform(prev => {
         const newScale = Math.max(0.1, Math.min(3, prev.scale * scaleFactor));
         return {
@@ -140,141 +175,9 @@ export function FamilyTreeCanvas({ trees }: Props) {
           y: centerY - (centerY - prev.y) * (newScale / prev.scale),
         };
       });
-
       touchRef.current = { mode: 'pinch', lastDist: dist };
     }
   }, []);
-
-  const renderConnections = (node: TreeNode): JSX.Element[] => {
-    const lines: JSX.Element[] = [];
-    const parentCenterX = node.x + node.width / 2;
-    const parentBottomY = node.y + NODE_HEIGHT;
-
-    if (node.children.length > 0) {
-      const midY = parentBottomY + V_GAP / 2;
-
-      // Vertical line from parent down
-      lines.push(
-        <line key={`v-${node.id}`} x1={parentCenterX} y1={parentBottomY} x2={parentCenterX} y2={midY}
-          className="stroke-border" strokeWidth={2} />
-      );
-
-      // Horizontal line spanning children
-      const firstChild = node.children[0];
-      const lastChild = node.children[node.children.length - 1];
-      const leftX = firstChild.x + firstChild.width / 2;
-      const rightX = lastChild.x + lastChild.width / 2;
-
-      if (node.children.length > 1) {
-        lines.push(
-          <line key={`h-${node.id}`} x1={leftX} y1={midY} x2={rightX} y2={midY}
-            className="stroke-border" strokeWidth={2} />
-        );
-      }
-
-      // Vertical lines to each child
-      node.children.forEach(child => {
-        const childCenterX = child.x + child.width / 2;
-        lines.push(
-          <line key={`vc-${child.id}`} x1={childCenterX} y1={midY} x2={childCenterX} y2={child.y}
-            className="stroke-border" strokeWidth={2} />
-        );
-        lines.push(...renderConnections(child));
-      });
-    }
-
-    return lines;
-  };
-
-  const renderNode = (node: TreeNode): JSX.Element[] => {
-    const elements: JSX.Element[] = [];
-
-    // Main member card
-    elements.push(
-      <g key={`node-${node.id}`} onClick={(e) => { e.stopPropagation(); setSelectedMember(node.member); }} className="cursor-pointer">
-        <rect x={node.x} y={node.y} width={NODE_WIDTH} height={NODE_HEIGHT} rx={12}
-          className="fill-card stroke-border hover:stroke-primary transition-colors" strokeWidth={1.5} />
-        {node.member.photo_url ? (
-          <clipPath id={`clip-${node.id}`}>
-            <circle cx={node.x + 28} cy={node.y + NODE_HEIGHT / 2} r={14} />
-          </clipPath>
-        ) : null}
-        {node.member.photo_url ? (
-          <>
-            <clipPath id={`clip-${node.id}`}><circle cx={node.x + 28} cy={node.y + NODE_HEIGHT / 2} r={14} /></clipPath>
-            <image href={node.member.photo_url} x={node.x + 14} y={node.y + NODE_HEIGHT / 2 - 14} width={28} height={28}
-              clipPath={`url(#clip-${node.id})`} preserveAspectRatio="xMidYMid slice" />
-          </>
-        ) : (
-          <circle cx={node.x + 28} cy={node.y + NODE_HEIGHT / 2} r={14}
-            className={node.member.gender === 'male' ? 'fill-primary/10' : 'fill-destructive/10'} />
-        )}
-        <text x={node.x + 50} y={node.y + NODE_HEIGHT / 2 - 6} className="fill-foreground text-[11px] font-medium" dominantBaseline="middle">
-          {node.member.full_name.length > 14 ? node.member.full_name.slice(0, 14) + '…' : node.member.full_name}
-        </text>
-        <text x={node.x + 50} y={node.y + NODE_HEIGHT / 2 + 10} className="fill-muted-foreground text-[9px]" dominantBaseline="middle">
-          {node.member.gender === 'male' ? '♂' : '♀'} {node.member.birth_date ? new Date(node.member.birth_date).getFullYear() : ''}
-          {node.member.death_date ? ` — ${new Date(node.member.death_date).getFullYear()}` : ''}
-        </text>
-      </g>
-    );
-
-    // Spouse cards
-    node.spouses.forEach((spouse, i) => {
-      const sx = node.x + NODE_WIDTH + SPOUSE_GAP + i * (NODE_WIDTH + SPOUSE_GAP);
-      const sy = node.y;
-
-      // Marriage line
-      elements.push(
-        <line key={`mar-${spouse.marriageId}`}
-          x1={node.x + NODE_WIDTH} y1={node.y + NODE_HEIGHT / 2}
-          x2={sx} y2={sy + NODE_HEIGHT / 2}
-          className="stroke-primary" strokeWidth={2} strokeDasharray="6 3" />
-      );
-      elements.push(
-        <circle key={`mheart-${spouse.marriageId}`}
-          cx={(node.x + NODE_WIDTH + sx) / 2} cy={sy + NODE_HEIGHT / 2} r={8}
-          className="fill-primary/10 stroke-primary" strokeWidth={1} />
-      );
-      elements.push(
-        <text key={`mh-text-${spouse.marriageId}`}
-          x={(node.x + NODE_WIDTH + sx) / 2} y={sy + NODE_HEIGHT / 2 + 1}
-          textAnchor="middle" dominantBaseline="middle" className="fill-primary text-[8px]">♥</text>
-      );
-
-      // Spouse card
-      elements.push(
-        <g key={`spouse-${spouse.member.id}`} onClick={(e) => { e.stopPropagation(); setSelectedMember(spouse.member); }} className="cursor-pointer">
-          <rect x={sx} y={sy} width={NODE_WIDTH} height={NODE_HEIGHT} rx={12}
-            className="fill-card stroke-border hover:stroke-primary transition-colors" strokeWidth={1.5} />
-          {spouse.member.photo_url ? (
-            <>
-              <clipPath id={`clip-s-${spouse.member.id}`}><circle cx={sx + 28} cy={sy + NODE_HEIGHT / 2} r={14} /></clipPath>
-              <image href={spouse.member.photo_url} x={sx + 14} y={sy + NODE_HEIGHT / 2 - 14} width={28} height={28}
-                clipPath={`url(#clip-s-${spouse.member.id})`} preserveAspectRatio="xMidYMid slice" />
-            </>
-          ) : (
-            <circle cx={sx + 28} cy={sy + NODE_HEIGHT / 2} r={14}
-              className={spouse.member.gender === 'male' ? 'fill-primary/10' : 'fill-destructive/10'} />
-          )}
-          <text x={sx + 50} y={sy + NODE_HEIGHT / 2 - 6} className="fill-foreground text-[11px] font-medium" dominantBaseline="middle">
-            {spouse.member.full_name.length > 14 ? spouse.member.full_name.slice(0, 14) + '…' : spouse.member.full_name}
-          </text>
-          <text x={sx + 50} y={sy + NODE_HEIGHT / 2 + 10} className="fill-muted-foreground text-[9px]" dominantBaseline="middle">
-            {spouse.member.gender === 'male' ? '♂' : '♀'} {spouse.member.birth_date ? new Date(spouse.member.birth_date).getFullYear() : ''}
-            {spouse.member.death_date ? ` — ${new Date(spouse.member.death_date).getFullYear()}` : ''}
-          </text>
-        </g>
-      );
-    });
-
-    // Render children nodes
-    node.children.forEach(child => {
-      elements.push(...renderNode(child));
-    });
-
-    return elements;
-  };
 
   return (
     <div className="relative w-full h-full" ref={containerRef}>
@@ -324,11 +227,16 @@ export function FamilyTreeCanvas({ trees }: Props) {
           touchRef.current = null;
         }}
       >
-        <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
-          {/* Connections first (behind nodes) */}
-          {trees.map(tree => renderConnections(tree))}
-          {/* Nodes on top */}
-          {trees.map(tree => renderNode(tree))}
+        <g
+          transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}
+          style={animating ? { transition: 'transform 0.4s ease-out' } : undefined}
+        >
+          {trees.map(tree => (
+            <TreeConnections key={`conn-${tree.id}`} node={tree} />
+          ))}
+          {trees.map(tree => (
+            <TreeNodeCard key={`node-${tree.id}`} node={tree} onNodeClick={handleNodeClick} />
+          ))}
         </g>
       </svg>
 
@@ -358,6 +266,12 @@ export function FamilyTreeCanvas({ trees }: Props) {
             {selectedMember.phone && <p>📞 {selectedMember.phone}</p>}
             {selectedMember.bio && <p className="mt-2 text-foreground/70">{selectedMember.bio}</p>}
           </div>
+          <button
+            onClick={() => navigate(`/member/${selectedMember.id}`)}
+            className="mt-3 w-full text-center text-xs text-primary hover:underline font-medium"
+          >
+            Lihat Profil Lengkap →
+          </button>
         </div>
       )}
     </div>

@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Members from "./pages/Members";
 import SearchPage from "./pages/Search";
+import MemberProfile from "./pages/MemberProfile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/tree" element={<AppLayout><Index /></AppLayout>} />
             <Route path="/members" element={<AppLayout><Members /></AppLayout>} />
             <Route path="/search" element={<AppLayout><SearchPage /></AppLayout>} />
+            <Route path="/member/:id" element={<AppLayout><MemberProfile /></AppLayout>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
