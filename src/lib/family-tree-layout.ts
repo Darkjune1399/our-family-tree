@@ -256,4 +256,100 @@ export function getTreeBounds(trees: TreeNode[]): { minX: number; minY: number; 
   return { minX, minY, maxX, maxY };
 }
 
+/**
+ * Extract a subtree rooted at a specific member (including their spouses and all descendants).
+ * Returns a new set of TreeNodes laid out from scratch.
+ */
+export function buildSubtree(
+  members: FamilyMember[],
+  marriages: Marriage[],
+  rootMemberId: string
+): TreeNode[] {
+  const memberMap = new Map<string, FamilyMember>();
+  members.forEach(m => memberMap.set(m.id, m));
+
+  const childrenOf = new Map<string, Set<string>>();
+  members.forEach(m => {
+    if (m.father_id) {
+      if (!childrenOf.has(m.father_id)) childrenOf.set(m.father_id, new Set());
+      childrenOf.get(m.father_id)!.add(m.id);
+    }
+    if (m.mother_id) {
+      if (!childrenOf.has(m.mother_id)) childrenOf.set(m.mother_id, new Set());
+      childrenOf.get(m.mother_id)!.add(m.id);
+    }
+  });
+
+  const rootMember = memberMap.get(rootMemberId);
+  if (!rootMember) return [];
+
+  const visited = new Set<string>();
+
+  function buildNode(member: FamilyMember): TreeNode {
+    visited.add(member.id);
+
+    const memberMarriages = marriages.filter(
+      m => m.spouse1_id === member.id || m.spouse2_id === member.id
+    );
+    const spouses: { member: FamilyMember; marriageId: string }[] = [];
+    memberMarriages.forEach(m => {
+      const spouseId = m.spouse1_id === member.id ? m.spouse2_id : m.spouse1_id;
+      const spouse = memberMap.get(spouseId);
+      if (spouse && !visited.has(spouse.id)) {
+        spouses.push({ member: spouse, marriageId: m.id });
+        visited.add(spouse.id);
+      }
+    });
+
+    const myChildIds = childrenOf.get(member.id) || new Set();
+    myChildIds.forEach(childId => {
+      const child = memberMap.get(childId);
+      if (!child) return;
+      const otherParentId = child.father_id === member.id ? child.mother_id : child.father_id;
+      if (otherParentId && !visited.has(otherParentId)) {
+        const otherParent = memberMap.get(otherParentId);
+        if (otherParent && !spouses.find(s => s.member.id === otherParentId)) {
+          spouses.push({ member: otherParent, marriageId: `implicit-${member.id}-${otherParentId}` });
+          visited.add(otherParentId);
+        }
+      }
+    });
+
+    const allParentIds = new Set([member.id, ...spouses.map(s => s.member.id)]);
+    const childIdSet = new Set<string>();
+    allParentIds.forEach(pid => {
+      const kids = childrenOf.get(pid);
+      if (kids) kids.forEach(k => childIdSet.add(k));
+    });
+
+    const children: TreeNode[] = [];
+    childIdSet.forEach(childId => {
+      if (!visited.has(childId)) {
+        const child = memberMap.get(childId);
+        if (child) children.push(buildNode(child));
+      }
+    });
+
+    children.sort((a, b) => {
+      const da = a.member.birth_date || '';
+      const db = b.member.birth_date || '';
+      return da.localeCompare(db);
+    });
+
+    return {
+      id: member.id,
+      member,
+      spouses,
+      children,
+      x: 0,
+      y: 0,
+      width: NODE_WIDTH + spouses.length * (NODE_WIDTH + SPOUSE_GAP),
+    };
+  }
+
+  const tree = buildNode(rootMember);
+  layoutTree(tree, 0, 0);
+  return [tree];
+}
+
 export { NODE_WIDTH, NODE_HEIGHT, SPOUSE_GAP, V_GAP };
