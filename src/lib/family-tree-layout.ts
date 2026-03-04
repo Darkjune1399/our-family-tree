@@ -72,11 +72,19 @@ export function buildFamilyTree(members: FamilyMember[], marriages: Marriage[]):
     }
   });
 
-  // Also deduplicate roots that are parents: if root A has father_id/mother_id pointing to root B, 
-  // B is the true root, not A. But we already handled this via getAncestors.
-  // Additional: if a root is listed as someone's mother/father but that someone's other parent is also a root,
-  // mark the mother as spouse if they share children
   const rootArray = [...rootSet].filter(id => !spouseOfRoot.has(id));
+
+  // Sort roots: those with more total descendants first, so deeper ancestors
+  // get processed before their children's spouses' separate trees
+  function countDescendants(id: string, seen: Set<string> = new Set()): number {
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const kids = childrenOf.get(id) || new Set();
+    let count = kids.size;
+    kids.forEach(kid => { count += countDescendants(kid, seen); });
+    return count;
+  }
+  rootArray.sort((a, b) => countDescendants(b) - countDescendants(a));
 
   const visited = new Set<string>();
 
