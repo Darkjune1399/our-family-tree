@@ -104,6 +104,7 @@ export function MemberCard({ member, members, marriages, canEdit, onRefresh }: P
       <EditMemberDialog
         member={member}
         members={members}
+        marriages={marriages}
         open={editOpen}
         onOpenChange={setEditOpen}
         onUpdated={onRefresh}

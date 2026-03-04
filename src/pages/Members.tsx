@@ -58,7 +58,7 @@ const Members = () => {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-display font-bold text-foreground">Anggota Keluarga</h1>
-        {user && <AddMemberDialog members={members} userId={user.id} onAdded={fetchData} />}
+        {user && <AddMemberDialog members={members} marriages={marriages} userId={user.id} onAdded={fetchData} />}
       </div>
 
       <MemberFilters
