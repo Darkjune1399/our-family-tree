@@ -72,6 +72,22 @@ export function buildFamilyTree(members: FamilyMember[], marriages: Marriage[]):
     }
   });
 
+  // Also remove roots who are married to a non-root (someone with parents).
+  // They will be discovered as spouses when the parent's tree is built.
+  marriages.forEach(mar => {
+    const id1InRoot = rootSet.has(mar.spouse1_id) && !spouseOfRoot.has(mar.spouse1_id);
+    const id2InRoot = rootSet.has(mar.spouse2_id) && !spouseOfRoot.has(mar.spouse2_id);
+    const m1 = memberMap.get(mar.spouse1_id);
+    const m2 = memberMap.get(mar.spouse2_id);
+    // If one spouse is a root and the other has parents (non-root), demote the root
+    if (id1InRoot && m2 && (m2.father_id || m2.mother_id)) {
+      spouseOfRoot.add(mar.spouse1_id);
+    }
+    if (id2InRoot && m1 && (m1.father_id || m1.mother_id)) {
+      spouseOfRoot.add(mar.spouse2_id);
+    }
+  });
+
   const rootArray = [...rootSet].filter(id => !spouseOfRoot.has(id));
 
   // Sort roots: those with more total descendants first, so deeper ancestors
