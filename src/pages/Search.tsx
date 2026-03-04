@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ const SearchPage = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FamilyMember[]>([]);
   const [searched, setSearched] = useState(false);
+  const navigate = useNavigate();
 
   const handleSearch = async (q: string) => {
     setQuery(q);
@@ -42,13 +44,20 @@ const SearchPage = () => {
       )}
       <div className="space-y-3">
         {results.map((member) => (
-          <Card key={member.id} className="hover:shadow-md transition-shadow">
+          <Card key={member.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/member/${member.id}`)}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                  <User className="h-4 w-4 text-primary" />
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                  {member.photo_url ? (
+                    <img src={member.photo_url} alt={member.full_name} className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="h-4 w-4 text-primary" />
+                  )}
                 </div>
-                <CardTitle className="text-base font-display">{member.full_name}</CardTitle>
+                <div>
+                  <CardTitle className="text-base font-display">{member.full_name}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{member.gender === 'male' ? 'Laki-laki' : 'Perempuan'}</p>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="text-sm flex gap-4 text-muted-foreground">

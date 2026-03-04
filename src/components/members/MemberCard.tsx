@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Tables } from '@/integrations/supabase/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ export function MemberCard({ member, members, marriages, canEdit, onRefresh }: P
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [spouseOpen, setSpouseOpen] = useState(false);
+  const navigate = useNavigate();
 
   const memberMarriages = marriages.filter(
     m => m.spouse1_id === member.id || m.spouse2_id === member.id
@@ -31,9 +33,15 @@ export function MemberCard({ member, members, marriages, canEdit, onRefresh }: P
     return members.find(x => x.id === spouseId)?.full_name || '?';
   });
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate if clicking on action buttons
+    if ((e.target as HTMLElement).closest('button')) return;
+    navigate(`/member/${member.id}`);
+  };
+
   return (
     <>
-      <Card className="hover:shadow-md transition-shadow">
+      <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={handleCardClick}>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden shrink-0">
