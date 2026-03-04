@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
@@ -12,13 +12,16 @@ import { Plus, Upload, X } from 'lucide-react';
 
 type FamilyMember = Tables<'family_members'>;
 
+type Marriage = Tables<'marriages'>;
+
 type Props = {
   members: FamilyMember[];
+  marriages: Marriage[];
   userId: string | undefined;
   onAdded: () => void;
 };
 
-export function AddMemberDialog({ members, userId, onAdded }: Props) {
+export function AddMemberDialog({ members, marriages, userId, onAdded }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -40,6 +43,27 @@ export function AddMemberDialog({ members, userId, onAdded }: Props) {
 
   const males = members.filter(m => m.gender === 'male');
   const females = members.filter(m => m.gender === 'female');
+
+  // Auto-fill spouse based on marriages
+  useEffect(() => {
+    if (!fatherId || fatherId === 'none') return;
+    const marriage = marriages.find(m => m.spouse1_id === fatherId || m.spouse2_id === fatherId);
+    if (marriage) {
+      const spouseId = marriage.spouse1_id === fatherId ? marriage.spouse2_id : marriage.spouse1_id;
+      const spouse = members.find(m => m.id === spouseId);
+      if (spouse && spouse.gender === 'female') setMotherId(spouseId);
+    }
+  }, [fatherId]);
+
+  useEffect(() => {
+    if (!motherId || motherId === 'none') return;
+    const marriage = marriages.find(m => m.spouse1_id === motherId || m.spouse2_id === motherId);
+    if (marriage) {
+      const spouseId = marriage.spouse1_id === motherId ? marriage.spouse2_id : marriage.spouse1_id;
+      const spouse = members.find(m => m.id === spouseId);
+      if (spouse && spouse.gender === 'male') setFatherId(spouseId);
+    }
+  }, [motherId]);
 
   const resetForm = () => {
     setFullName(''); setGender('male'); setBirthPlace(''); setBirthDate('');

@@ -12,15 +12,18 @@ import { Upload, X } from 'lucide-react';
 
 type FamilyMember = Tables<'family_members'>;
 
+type Marriage = Tables<'marriages'>;
+
 type Props = {
   member: FamilyMember;
   members: FamilyMember[];
+  marriages: Marriage[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdated: () => void;
 };
 
-export function EditMemberDialog({ member, members, open, onOpenChange, onUpdated }: Props) {
+export function EditMemberDialog({ member, members, marriages, open, onOpenChange, onUpdated }: Props) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -59,6 +62,30 @@ export function EditMemberDialog({ member, members, open, onOpenChange, onUpdate
 
   const males = members.filter(m => m.gender === 'male' && m.id !== member.id);
   const females = members.filter(m => m.gender === 'female' && m.id !== member.id);
+
+  // Auto-fill spouse based on marriages (skip on initial load)
+  const [initialized, setInitialized] = useState(false);
+  useEffect(() => { if (open) setTimeout(() => setInitialized(true), 100); else setInitialized(false); }, [open]);
+
+  useEffect(() => {
+    if (!initialized || !fatherId || fatherId === 'none') return;
+    const marriage = marriages.find(m => m.spouse1_id === fatherId || m.spouse2_id === fatherId);
+    if (marriage) {
+      const spouseId = marriage.spouse1_id === fatherId ? marriage.spouse2_id : marriage.spouse1_id;
+      const spouse = members.find(m => m.id === spouseId);
+      if (spouse && spouse.gender === 'female') setMotherId(spouseId);
+    }
+  }, [fatherId, initialized]);
+
+  useEffect(() => {
+    if (!initialized || !motherId || motherId === 'none') return;
+    const marriage = marriages.find(m => m.spouse1_id === motherId || m.spouse2_id === motherId);
+    if (marriage) {
+      const spouseId = marriage.spouse1_id === motherId ? marriage.spouse2_id : marriage.spouse1_id;
+      const spouse = members.find(m => m.id === spouseId);
+      if (spouse && spouse.gender === 'male') setFatherId(spouseId);
+    }
+  }, [motherId, initialized]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
