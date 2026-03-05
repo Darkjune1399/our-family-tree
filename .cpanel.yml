@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/muhmuh5555/public_html/family-tree
+    - /bin/cp -R * $DEPLOYPATH
